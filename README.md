@@ -1,72 +1,115 @@
 # TradingView Market Structure Monitor
 
-โปรแกรม Windows แบบ local สำหรับอ่านกราฟ TradingView จากหน้าจอและวาด Market Structure ผ่าน transparent overlay โดยไม่ใช้ TradingView API, cloud API หรือระบบส่งคำสั่งซื้อขาย
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-Computer%20Vision-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white)
+![NumPy](https://img.shields.io/badge/NumPy-Array%20Engine-013243?style=for-the-badge&logo=numpy&logoColor=white)
+![PyQt6](https://img.shields.io/badge/PyQt6-Overlay%20UI-41CD52?style=for-the-badge&logo=qt&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-Local%20Desktop-0078D4?style=for-the-badge&logo=windows&logoColor=white)
 
-## ความสามารถ
+A local Windows desktop monitor that reads TradingView candles directly from the screen, detects market structure, and draws BOS / CHoCH markers through a transparent always-on-top overlay.
 
-- ตรวจ candle จากสีและรูปทรง: `x`, `high`, `low`, `body_top`, `body_bottom`, `direction`
-- ตรวจ Swing High / Swing Low ด้วย pivot window
-- จัดประเภท HH / HL / LH / LL
-- ตรวจ BOS และ CHoCH จากการปิดของ body เหนือ/ใต้ swing level
-- นับ BOS ใหม่จาก `#1` หลัง CHoCH ทุกครั้ง
-- วาด marker และ label บน transparent always-on-top overlay
-- F8 สลับ Normal/Edit mode; ใน Edit mode คลิกเส้น marker เพื่อลบ
-- แจ้งเตือนด้วยเสียงและเขียน event ใหม่เป็น JSONL
-- ไม่บันทึก screenshot ระหว่างทำงาน
+No TradingView API. No cloud service. No broker integration. No automated order execution.
 
-## เริ่มใช้งาน
+## Highlights
 
-ให้เปิด TradingView เต็มหน้าจอด้วย Dark theme และสี candle ตามค่าที่กำหนด จากนั้นรัน:
+- Detects candles from pixel color and geometry: `x`, `high`, `low`, `body_top`, `body_bottom`, `direction`
+- Finds strict pivot-based Swing High / Swing Low points
+- Classifies structure as `HH`, `HL`, `LH`, and `LL`
+- Detects close-confirmed `BOS` and `CHoCH` events
+- Resets the BOS counter after every CHoCH
+- Draws live marker lines and labels on a transparent overlay
+- Supports manual marker deletion in edit mode
+- Plays local sound alerts and writes new events to JSONL
+- Avoids saving screenshots during normal operation
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+| --- | --- | --- |
+| Runtime | Python | Main application and structure engine |
+| Capture | MSS | Fast local screen capture |
+| Vision | OpenCV + NumPy | Candle color masks, morphology, and component extraction |
+| UI | PyQt6 | Transparent always-on-top overlay |
+| OS Integration | Win32 APIs via `ctypes` | Click-through windows, capture exclusion, hotkeys |
+| Tests | `unittest` | Detector and market-structure verification |
+
+## Quick Start
+
+Open TradingView in fullscreen with the expected dark theme and candle colors, then run:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 python .\trading_monitor.py
 ```
 
-ทดสอบทั้งหมด:
+Run the core tests:
 
 ```powershell
-python -m unittest -v test_v1_candle_detector.py test_market_structure.py
+python -m unittest -v test_v1_candle_detector test_market_structure
 ```
 
-## การควบคุม
+## Controls
 
-- `F8`: สลับ Normal/Edit mode
-- Normal mode: overlay เป็น click-through ใช้งาน TradingView ได้ตามปกติ
-- Edit mode: คลิกใกล้เส้น BOS/CHoCH เพื่อลบ marker นั้น แล้วกด F8 เพื่อกลับ Normal mode
+- `F8`: Toggle between Normal mode and Edit mode
+- Normal mode: the overlay is click-through, so TradingView remains interactive
+- Edit mode: click near a BOS / CHoCH marker line to delete it, then press `F8` again to return to Normal mode
 
 ## Calibration
 
-ค่าหน้าจอ สี และ candle filters อยู่ตอนต้นของ `v1_candle_detector.py` ได้แก่ `REGION`, สี bull/bear, color distance และขนาด candle
+The detector is tuned for a fixed fullscreen TradingView layout. Screen position, candle colors, and filter thresholds live near the top of `v1_candle_detector.py`.
 
-ค่า market structure อยู่ตอนต้นของ `trading_monitor.py` ได้แก่:
+Important detector settings:
 
-- `SWING_LEFT` / `SWING_RIGHT`: ค่าเริ่มต้น 2/2
-- `SWING_EQUALITY_TOLERANCE`: tolerance ของ equal high/low
-- `BREAK_BUFFER_PIXELS`: ระยะปิดทะลุ swing เพื่อยืนยัน break
+- `REGION`: screen capture rectangle
+- Bull / bear BGR color targets
+- Color tolerance
+- Candle body and wick size filters
+- UI exclusion zones
+
+Market-structure settings live near the top of `trading_monitor.py`:
+
+- `SWING_LEFT` / `SWING_RIGHT`: pivot window size
+- `SWING_EQUALITY_TOLERANCE`: equal high / low tolerance in pixels
+- `BREAK_BUFFER_PIXELS`: close-confirmation buffer
 - `SHOW_CANDLE_DEBUG`, `SHOW_SWINGS`, `SHOW_STRUCTURE_MARKERS`
 - `ENABLE_EVENT_LOG`, `ENABLE_SOUND_NOTIFICATION`
 
-ROI ปัจจุบันออกแบบสำหรับ TradingView เต็มหน้าจอ หากย่อหรือแบ่งหน้าจอ ต้องปรับ `REGION` ไม่เช่นนั้น detector อาจอ่าน UI ของโปรแกรมอื่น
+If TradingView is resized, moved, themed differently, or split with another window, update `REGION` and the candle colors before relying on detections.
 
-## นิยาม Structure
+## Structure Rules
 
-- Pixel Y น้อยกว่า = ราคาสูงกว่า
-- Swing ต้องต่ำ/สูงกว่าเพื่อนบ้านแบบ strict เพื่อไม่สร้าง pivot ซ้ำบน plateau
-- Bullish close = `body_top`; bearish close = `body_bottom`
-- BOS คือ break ตาม trend ปัจจุบัน
-- CHoCH คือ break protected swing ฝั่งตรงข้าม และ reset BOS counter
-- ใช้ close-confirmation ไม่ใช้ wick-only break
+- Lower pixel `y` means a higher price
+- Swing pivots use strict comparison to avoid duplicate plateau pivots
+- Bullish close uses `body_top`
+- Bearish close uses `body_bottom`
+- BOS means a break in the current trend direction
+- CHoCH means a break of the protected swing against the current trend
+- Wick-only breaks are ignored; the candle body close must confirm the break
 
-## Event log
+## Event Log
 
-Event ใหม่หลังเปิดโปรแกรมจะถูกเพิ่มใน `logs/structure_events.jsonl` ไม่มีข้อมูลภาพอยู่ใน log โปรแกรมไม่แจ้งเตือนย้อนหลังตอนเริ่มต้น
+New live events are appended to:
 
-## ไฟล์หลัก
+```text
+logs/structure_events.jsonl
+```
 
-- `v1_candle_detector.py`: screen capture และ candle extraction
-- `market_structure.py`: V2-V5 pure calculation engine
-- `marker_manager.py`: marker lifecycle และ manual deletion
-- `structure_notifications.py`: event deduplication, JSONL log และเสียงแจ้งเตือน
-- `trading_monitor.py`: V1-V6 real-time application
+The event log stores structured event data only. It does not store screenshots. Startup historical events are ignored so the app does not alert on old structure when it first opens.
 
+## Project Layout
+
+```text
+trading_monitor.py           # Real-time app and overlay
+v1_candle_detector.py        # Screen capture and candle extraction
+market_structure.py          # Swing, BOS, and CHoCH engine
+marker_manager.py            # Marker lifecycle and manual deletion
+structure_notifications.py   # Event dedupe, sound, and JSONL logging
+test_v1_candle_detector.py   # Candle detector tests
+test_market_structure.py     # Market-structure tests
+test_capture.py              # Manual capture helper
+test_overlay.py              # Manual overlay helper
+```
+
+## Safety Boundary
+
+This project is a local visual monitor only. It does not place trades, manage broker accounts, or provide financial advice. Treat all signals as visual aids that still require human review.
